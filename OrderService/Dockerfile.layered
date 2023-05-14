@@ -1,0 +1,25 @@
+# Build: docker build -t api-gateway:layered -f Dockerfile.layered .
+
+# lightweight image
+FROM eclipse-temurin:17.0.4.1_1-jre as builder
+# create a directory for extracted layers
+WORKDIR extracted
+# copy the jar file
+ADD target/*.jar app.jar
+# extract the layers from the jar file into the directory extracted
+RUN java -Djarmode=layertools -jar app.jar extract
+
+# stage 2
+FROM eclipse-temurin:17.0.4.1_1-jre
+WORKDIR application
+# copy the extracted layers from the previous stage
+# separete copies for each layer to take advantage of docker layer caching 
+# and avoid copying layers that have not changed
+COPY --from=builder extracted/dependencies/ ./
+COPY --from=builder extracted/spring-boot-loader/ ./
+COPY --from=builder extracted/snapshot-dependencies/ ./
+COPY --from=builder extracted/application/ ./
+EXPOSE 8080
+ENTRYPOINT ["java", "org.springframework.boot.loader.JarLauncher"]
+
+# mutli-stage build
